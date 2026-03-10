@@ -1,7 +1,10 @@
 [project]
 name = "mifid-bonds-data-loader"
 version = "0.1.0"
-description = "Add your description here"
+description = "Download, parse, and deduplicate ESMA FIRDS bond reference data into SQLite"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "httpx",
+  "rich",
+]

@@ -296,6 +296,27 @@ def parse_xml(xml_path: Path, writer: csv.DictWriter, progress, task) -> int:
     return count
 
 
+def sort_csv_by_id() -> None:
+    """Read the CSV, sort by id column, and write back."""
+    console.print("\n[bold blue]Sorting CSV by id...[/bold blue]")
+
+    # Read all rows
+    with OUTPUT_CSV.open("r", newline="", encoding="utf-8") as fh:
+        reader = csv.DictReader(fh)
+        rows = list(reader)
+
+    # Sort by id
+    rows.sort(key=lambda row: row["id"])
+
+    # Write back
+    with OUTPUT_CSV.open("w", newline="", encoding="utf-8") as fh:
+        writer = csv.DictWriter(fh, fieldnames=CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows(rows)
+
+    console.print("[green]✓ CSV sorted by id[/green]")
+
+
 def main() -> None:
     xml_files = sorted(DATA_DIR.glob("*/*.xml"))
     if not xml_files:
@@ -330,6 +351,9 @@ def main() -> None:
                 progress.update(task, total=n, completed=n)
                 console.print(f"  [green]{n:,} records[/green]")
                 total_rows += n
+
+    # Sort the CSV by id
+    sort_csv_by_id()
 
     output_mb = OUTPUT_CSV.stat().st_size / 1_048_576
     console.rule("[bold green]Done[/bold green]")
