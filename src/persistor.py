@@ -22,6 +22,7 @@ from rich.console import Console
 DATA_DIR = Path("data")
 SQLITE_PATH = DATA_DIR / "bonds.db"
 TABLE_NAME = "bonds"
+PRICES_TABLE = "prices"
 
 console = Console()
 
@@ -67,6 +68,76 @@ COLUMNS = [
     "relevant_trading_venue",
     "source_file",
 ]
+
+# Column order for the prices table.
+# - (isin, price_date) is the composite primary key.
+# - clean_price is the scraped price as a percentage of par (e.g. "98.5").
+# - ytm is the Yield to Maturity computed at scrape time, formatted with
+#   max 4 decimal places (e.g. "3.4521"). Empty string when not applicable
+#   (floating-rate / zero-coupon bonds, or solver failure).
+# - ytm_day_count records which day count convention produced the YTM.
+# - source identifies where the price came from (scraper name, vendor, etc.).
+# - scraped_at is the ISO timestamp the row was written.
+PRICES_COLUMNS = [
+    "isin",
+    "price_date",
+    "clean_price",
+    "ytm",
+    "ytm_day_count",
+    "source",
+    "scraped_at",
+]
+
+
+def ensure_prices_table(conn: sqlite3.Connection) -> None:
+    """Create the prices table if it does not exist (idempotent)."""
+    conn.execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {PRICES_TABLE} (
+            "isin" TEXT NOT NULL,
+            "price_date" TEXT NOT NULL,
+            "clean_price" TEXT NOT NULL,
+            "ytm" TEXT DEFAULT '',
+            "ytm_day_count" TEXT DEFAULT '',
+            "source" TEXT DEFAULT '',
+            "scraped_at" TEXT DEFAULT '',
+            PRIMARY KEY ("isin", "price_date"),
+            FOREIGN KEY ("isin") REFERENCES {TABLE_NAME}("isin")
+        )
+        """
+    )
+    conn.commit()
+
+
+def make_sqlite_prices_writer(db_path: Path) -> RecordWriter:
+    """
+    Factory function that returns a closure for writing price records to SQLite.
+
+    Each record is expected to be a dict with the keys in PRICES_COLUMNS.
+    Callers (e.g. a price scraper) should compute the YTM via
+    `src.ytm.calculate_ytm` before passing the record in, so that price
+    and YTM are written together.
+    """
+
+    def write_prices(records: list[dict]) -> None:
+        conn = sqlite3.connect(db_path)
+        ensure_prices_table(conn)
+        cursor = conn.cursor()
+
+        placeholders = ", ".join("?" * len(PRICES_COLUMNS))
+        upsert_sql = f"""
+            INSERT OR REPLACE INTO {PRICES_TABLE} ({", ".join(f'"{col}"' for col in PRICES_COLUMNS)})
+            VALUES ({placeholders})
+        """
+
+        for record in records:
+            values = [record.get(col, "") for col in PRICES_COLUMNS]
+            cursor.execute(upsert_sql, values)
+
+        conn.commit()
+        conn.close()
+
+    return write_prices
 
 
 def make_sqlite_writer(db_path: Path) -> RecordWriter:
