@@ -215,7 +215,10 @@ def parse_record(elem: ET.Element, source_file: str) -> dict:
         fltg_term_unit   = txt(fltg_el, "Term", "Unit")
         fltg_spread      = txt(fltg_el, "BsisPtSprd")
     else:
-        rate_type = fixed_rate = fltg_ref_isin = fltg_term_val = fltg_term_unit = fltg_spread = ""
+        # No IntrstRate element — check CFI position 2 for zero-coupon (Z)
+        # Zero-coupon bonds omit the IntrstRate block in FIRDS XML
+        rate_type = "zero_coupon" if len(cfi) == 6 and cfi[2] == "Z" else ""
+        fixed_rate = fltg_ref_isin = fltg_term_val = fltg_term_unit = fltg_spread = ""
 
     # --- Underlying (structured products) ---
     undrlg_bskt = txt(elem, "DerivInstrmAttrbts", "UndrlygInstrm", "Bskt", "ISIN")
