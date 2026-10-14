@@ -274,17 +274,26 @@ def parse_xml(xml_path: Path, writer: csv.DictWriter, progress, task) -> int:
     """Stream-parse a single XML file and write rows to the CSV writer."""
     source_file = xml_path.stem
     ref_tag = f"{{{NS}}}RefData"
+    report_tag = f"{{{NS}}}FinInstrmRptgRefDataRpt"
     count = 0
 
-    context = ET.iterparse(xml_path, events=("start", "end"))
-    _, root = next(context)  # grab root element so we can clear it
-
-    for event, elem in context:
-        if event == "end" and elem.tag == ref_tag:
+    # RefData elements are nested under BizData/Pyld/Document/FinInstrmRptgRefDataRpt,
+    # so clearing the root does not free them. Clear their direct parent instead.
+    report = None
+    for event, elem in ET.iterparse(xml_path, events=("start", "end")):
+        if event == "start":
+            if elem.tag == report_tag:
+                report = elem
+            continue
+        if elem.tag == ref_tag:
             row = parse_record(elem, source_file)
             writer.writerow(row)
             count += 1
-            root.clear()  # free memory — discard processed children
+            # free memory — discard processed RefData
+            if report is not None:
+                report.clear()
+            else:
+                elem.clear()
             if count % 10_000 == 0:
                 progress.advance(task, 10_000)
 

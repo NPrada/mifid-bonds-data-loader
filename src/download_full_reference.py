@@ -136,7 +136,12 @@ def find_latest_bonds_files(max_weeks_back: int = 8) -> tuple[date, list[dict]]:
 
 
 def download_file(url: str, dest: Path) -> None:
-    """Stream-download a file with a rich progress bar."""
+    """Stream-download a file with a rich progress bar.
+
+    Writes to a .part file and renames it on success, so an interrupted
+    download is never mistaken for a complete one on the next run.
+    """
+    tmp = dest.with_name(dest.name + ".part")
     with httpx.stream("GET", url, timeout=600, follow_redirects=True) as response:
         response.raise_for_status()
         total = int(response.headers.get("content-length", 0)) or None
@@ -151,10 +156,11 @@ def download_file(url: str, dest: Path) -> None:
             transient=True,
         ) as progress:
             task = progress.add_task("dl", filename=dest.name, total=total)
-            with dest.open("wb") as fh:
+            with tmp.open("wb") as fh:
                 for chunk in response.iter_bytes(chunk_size=65536):
                     fh.write(chunk)
                     progress.advance(task, len(chunk))
+    tmp.replace(dest)
 
 
 def extract_zip(zip_path: Path, extract_to: Path) -> None:
